@@ -1,5 +1,4 @@
-# Automatización Limpieza Cartera – Dusakawi EPS
-
+# Automatización Limpieza Cartera 
 Aplicación web para limpieza y validación automática de reportes de cartera ICETEX.
 
 ## Características
