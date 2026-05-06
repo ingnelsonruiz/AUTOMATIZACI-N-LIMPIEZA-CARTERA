@@ -161,9 +161,9 @@ export default function App() {
               </div>
               <div>
                 <h1 className="text-sm font-bold text-gray-900 leading-tight">
-                  Automatización Limpieza Cartera
+                  CarteraClean Pro
                 </h1>
-                <p className="text-xs text-gray-500">Dusakawi EPS · Módulo ETL</p>
+                <p className="text-xs text-gray-500">Módulo ETL · Limpieza Inteligente de Cartera</p>
               </div>
             </div>
             <div className="hidden sm:flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-1.5">
@@ -175,12 +175,23 @@ export default function App() {
       </header>
 
       {/* ── SUBHEADER AZUL ── */}
-      <div className="bg-blue-600 text-white">
-        <div className="max-w-5xl mx-auto px-6 py-6">
-          <h2 className="text-xl font-bold">Limpieza y Validación de Reportes</h2>
-          <p className="text-blue-200 text-sm mt-1">
-            Carga tu archivo Excel · El sistema aplica automáticamente todas las reglas del manual
+      <div className="bg-gradient-to-r from-blue-700 via-blue-600 to-blue-500 text-white">
+        <div className="max-w-5xl mx-auto px-6 py-8">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-2 h-8 bg-white/40 rounded-full"></div>
+            <h2 className="text-2xl font-extrabold tracking-tight">
+              Limpieza y Validación Automática de Cartera
+            </h2>
+          </div>
+          <p className="text-blue-100 text-sm ml-5">
+            Carga tu archivo Excel · Procesamiento inteligente aplicado en segundos · Sin pérdida de datos
           </p>
+          <div className="flex flex-wrap gap-3 mt-4 ml-5">
+            <span className="bg-white/20 text-white text-xs font-semibold px-3 py-1 rounded-full">⚡ Procesamiento local</span>
+            <span className="bg-white/20 text-white text-xs font-semibold px-3 py-1 rounded-full">📁 Hasta 60 MB+</span>
+            <span className="bg-white/20 text-white text-xs font-semibold px-3 py-1 rounded-full">🔒 Sin servidores</span>
+            <span className="bg-white/20 text-white text-xs font-semibold px-3 py-1 rounded-full">📊 Reporte de estadísticas</span>
+          </div>
         </div>
       </div>
 
@@ -458,10 +469,10 @@ export default function App() {
       <footer className="bg-white border-t border-gray-200 mt-8">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
           <span className="text-xs text-gray-400">
-            © 2026 Dusakawi EPS · Automatización Limpieza Cartera
+            © 2026 CarteraClean Pro · Módulo ETL
           </span>
           <span className="text-xs text-gray-400">
-            Diseñado por <span className="font-semibold text-gray-500">Ing. Hernán Conrado Medina</span>
+            Diseñado por <span className="font-semibold text-gray-600">Ing. Hernán Conrado Medina</span>
           </span>
         </div>
       </footer>
