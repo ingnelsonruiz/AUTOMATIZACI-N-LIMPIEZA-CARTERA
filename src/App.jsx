@@ -72,10 +72,24 @@ export default function App() {
   const [mostrarDetalle, setMostrarDetalle] = useState(false)
   const inputRef = useRef()
 
+  // Límites de tamaño
+  const MB = 1024 * 1024
+  const LIMITE_ADVERTENCIA_MB = 150   // aviso amarillo
+  const LIMITE_MAXIMO_MB      = 400   // error duro → recomendar Python
+
   const handleArchivo = (file) => {
     if (!file) return
     if (!file.name.toLowerCase().endsWith('.xlsx')) {
       setError('Solo se aceptan archivos .xlsx')
+      return
+    }
+    const sizeMB = file.size / MB
+    if (sizeMB > LIMITE_MAXIMO_MB) {
+      setError(
+        `Archivo demasiado grande para procesamiento web (${sizeMB.toFixed(0)} MB). ` +
+        `El navegador no puede procesar archivos superiores a ${LIMITE_MAXIMO_MB} MB. ` +
+        `Use el script Python (limpiar_cartera.py) que maneja archivos de 500 MB+ sin problemas.`
+      )
       return
     }
     setArchivo(file)
@@ -101,7 +115,10 @@ export default function App() {
       const buffer = await archivo.arrayBuffer()
       setPasoActual(2)
       await new Promise(r => setTimeout(r, 60))
-      const wb = XLSX.read(buffer, { type: 'array', cellDates: false })
+      // cellNF: true → preserva los formatos numéricos (crucial para fechas DD/MM/YYYY)
+      // cellDates: false → fechas quedan como número serial con tipo 'n' (las saltamos en cartera.js)
+      // Sin cellNF, SheetJS pierde el formato y escribe el número crudo (ej: 46112)
+      const wb = XLSX.read(buffer, { type: 'array', cellDates: false, cellNF: true })
       setPasoActual(3)
       await new Promise(r => setTimeout(r, 60))
 
@@ -188,7 +205,7 @@ export default function App() {
           </p>
           <div className="flex flex-wrap gap-3 mt-4 ml-5">
             <span className="bg-white/20 text-white text-xs font-semibold px-3 py-1 rounded-full">⚡ Procesamiento local</span>
-            <span className="bg-white/20 text-white text-xs font-semibold px-3 py-1 rounded-full">📁 Hasta 60 MB+</span>
+            <span className="bg-white/20 text-white text-xs font-semibold px-3 py-1 rounded-full">📁 Hasta 400 MB</span>
             <span className="bg-white/20 text-white text-xs font-semibold px-3 py-1 rounded-full">🔒 Sin servidores</span>
             <span className="bg-white/20 text-white text-xs font-semibold px-3 py-1 rounded-full">📊 Reporte de estadísticas</span>
           </div>
@@ -253,6 +270,18 @@ export default function App() {
                   )}
                 </div>
               </div>
+
+              {/* Advertencia tamaño grande */}
+              {archivo && (archivo.size / MB) > LIMITE_ADVERTENCIA_MB && (archivo.size / MB) <= LIMITE_MAXIMO_MB && (
+                <div className="mt-3 flex items-start gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800">
+                  <AlertCircle size={15} className="flex-shrink-0 mt-0.5 text-amber-600" />
+                  <p className="text-xs leading-relaxed">
+                    <span className="font-bold">Archivo grande ({(archivo.size / MB).toFixed(0)} MB).</span>{' '}
+                    El procesamiento puede tardar más de lo habitual o fallar por memoria del navegador.
+                    Para archivos de este tamaño se recomienda el <span className="font-bold">script Python</span> (limpiar_cartera.py).
+                  </p>
+                </div>
+              )}
 
               {/* Botones */}
               {archivo && !resultado && (
