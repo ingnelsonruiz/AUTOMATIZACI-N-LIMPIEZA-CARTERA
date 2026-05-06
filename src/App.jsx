@@ -1,12 +1,23 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// CarteraClean Pro  –  Frontend React + Vite
+// Llama al backend FastAPI en Render para procesar el archivo
+// Deploy: Vercel  |  Variable: VITE_API_URL
+// ─────────────────────────────────────────────────────────────────────────────
+
 import { useState, useCallback, useRef } from 'react'
-import * as XLSX from 'xlsx'
 import {
   Upload, FileSpreadsheet, Download, CheckCircle2,
   AlertCircle, Loader2, BarChart3, X, ChevronDown,
   ChevronUp, Trash2, FileCheck, TrendingUp, Shield,
-  Database, FileText
+  Database, FileText, Wifi
 } from 'lucide-react'
-import { limpiarCartera } from './utils/cartera'
+
+// URL del backend. En Vercel se configura como variable de entorno VITE_API_URL
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COMPONENTES AUXILIARES
+// ─────────────────────────────────────────────────────────────────────────────
 
 function StatCard({ label, value, color = 'blue', icon: Icon }) {
   const styles = {
@@ -21,9 +32,11 @@ function StatCard({ label, value, color = 'blue', icon: Icon }) {
   return (
     <div className={`rounded-xl border ${s.card} p-5 shadow-sm flex flex-col gap-3`}>
       <div className={`flex items-center gap-2 text-xs font-semibold uppercase tracking-wide ${s.text}`}>
-        {Icon && <div className={`w-6 h-6 rounded-md ${s.badge} flex items-center justify-center`}>
-          <Icon size={13} />
-        </div>}
+        {Icon && (
+          <div className={`w-6 h-6 rounded-md ${s.badge} flex items-center justify-center`}>
+            <Icon size={13} />
+          </div>
+        )}
         {label}
       </div>
       <div className={`text-3xl font-bold ${s.val}`}>
@@ -39,57 +52,70 @@ function PasoProgreso({ numero, label, activo, completado }) {
       ${activo ? 'bg-blue-50 border border-blue-200' : 'border border-transparent'}`}>
       <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 transition-all
         ${completado ? 'bg-green-500 text-white shadow-sm'
-          : activo ? 'bg-blue-600 text-white shadow-sm'
+          : activo   ? 'bg-blue-600 text-white shadow-sm'
           : 'bg-gray-200 text-gray-500'}`}>
         {completado ? <CheckCircle2 size={14} /> : numero}
       </div>
-      <span className={`text-sm font-medium ${activo ? 'text-blue-700' : completado ? 'text-gray-400' : 'text-gray-500'}`}>
+      <span className={`text-sm font-medium
+        ${activo ? 'text-blue-700' : completado ? 'text-gray-400' : 'text-gray-500'}`}>
         {label}
       </span>
-      {activo && <Loader2 size={14} className="ml-auto animate-spin text-blue-500" />}
+      {activo     && <Loader2 size={14}     className="ml-auto animate-spin text-blue-500" />}
       {completado && <CheckCircle2 size={14} className="ml-auto text-green-500" />}
     </div>
   )
 }
 
+// Barra de progreso de subida
+function BarraSubida({ pct }) {
+  return (
+    <div className="mt-3">
+      <div className="flex justify-between text-xs text-gray-500 mb-1">
+        <span>Subiendo archivo...</span>
+        <span>{pct}%</span>
+      </div>
+      <div className="w-full bg-gray-200 rounded-full h-2">
+        <div
+          className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  )
+}
+
 const PASOS = [
-  'Leyendo archivo Excel...',
-  'Cargando estructura de datos...',
-  'Limpiando espacios múltiples...',
-  'Eliminando caracteres especiales...',
-  'Procesando columna SUBLINEA...',
-  'Eliminando hojas adicionales...',
-  'Limpiando columnas de calificación...',
+  'Preparando archivo...',
+  'Conectando con servidor...',
+  'Subiendo archivo al servidor...',
+  'Aplicando reglas de limpieza...',
+  'Validando datos y calificaciones...',
+  'Verificando columna SUBLINEA...',
   'Generando archivo v02...',
+  'Preparando descarga...',
 ]
 
+// ─────────────────────────────────────────────────────────────────────────────
+// APP PRINCIPAL
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function App() {
-  const [archivo, setArchivo]           = useState(null)
-  const [procesando, setProcesando]     = useState(false)
-  const [pasoActual, setPasoActual]     = useState(-1)
-  const [error, setError]               = useState(null)
-  const [resultado, setResultado]       = useState(null)
+  const [archivo, setArchivo]               = useState(null)
+  const [procesando, setProcesando]         = useState(false)
+  const [pasoActual, setPasoActual]         = useState(-1)
+  const [uploadPct, setUploadPct]           = useState(0)
+  const [error, setError]                   = useState(null)
+  const [resultado, setResultado]           = useState(null)
   const [mostrarDetalle, setMostrarDetalle] = useState(false)
   const inputRef = useRef()
 
-  // Límites de tamaño
   const MB = 1024 * 1024
-  const LIMITE_ADVERTENCIA_MB = 150   // aviso amarillo
-  const LIMITE_MAXIMO_MB      = 400   // error duro → recomendar Python
 
+  // ── Manejo de archivo ─────────────────────────────────────────────────────
   const handleArchivo = (file) => {
     if (!file) return
     if (!file.name.toLowerCase().endsWith('.xlsx')) {
       setError('Solo se aceptan archivos .xlsx')
-      return
-    }
-    const sizeMB = file.size / MB
-    if (sizeMB > LIMITE_MAXIMO_MB) {
-      setError(
-        `Archivo demasiado grande para procesamiento web (${sizeMB.toFixed(0)} MB). ` +
-        `El navegador no puede procesar archivos superiores a ${LIMITE_MAXIMO_MB} MB. ` +
-        `Use el script Python (limpiar_cartera.py) que maneja archivos de 500 MB+ sin problemas.`
-      )
       return
     }
     setArchivo(file)
@@ -102,56 +128,86 @@ export default function App() {
     handleArchivo(e.dataTransfer.files[0])
   }, [])
 
-  const procesar = async () => {
+  // ── Procesamiento: sube al backend y recibe el archivo limpio ─────────────
+  const procesar = () => {
     if (!archivo) return
     setProcesando(true)
     setError(null)
     setResultado(null)
     setPasoActual(0)
+    setUploadPct(0)
 
-    try {
-      await new Promise(r => setTimeout(r, 60))
-      setPasoActual(1)
-      const buffer = await archivo.arrayBuffer()
-      setPasoActual(2)
-      await new Promise(r => setTimeout(r, 60))
-      // cellNF: true → preserva los formatos numéricos (crucial para fechas DD/MM/YYYY)
-      // cellDates: false → fechas quedan como número serial con tipo 'n' (las saltamos en cartera.js)
-      // Sin cellNF, SheetJS pierde el formato y escribe el número crudo (ej: 46112)
-      const wb = XLSX.read(buffer, { type: 'array', cellDates: false, cellNF: true })
-      setPasoActual(3)
-      await new Promise(r => setTimeout(r, 60))
+    const formData = new FormData()
+    formData.append('file', archivo)
 
-      const { workbook, stats } = limpiarCartera(wb, (msg) => {
-        if (msg.includes('50'))         setPasoActual(4)
-        else if (msg.includes('Hoja'))  setPasoActual(5)
-        else if (msg.includes('cal'))   setPasoActual(6)
-      })
+    // Usamos XHR para tener progreso de subida real
+    const xhr = new XMLHttpRequest()
+
+    xhr.upload.addEventListener('progress', (e) => {
+      if (e.lengthComputable) {
+        const pct = Math.round((e.loaded / e.total) * 100)
+        setUploadPct(pct)
+        // Avanzar pasos según el progreso de subida
+        if (pct < 30)  setPasoActual(1)
+        else if (pct < 80)  setPasoActual(2)
+        else setPasoActual(3)
+      }
+    })
+
+    xhr.addEventListener('load', () => {
+      setPasoActual(6)
+
+      if (xhr.status !== 200) {
+        let detalle = 'Error en el servidor'
+        try {
+          const err = JSON.parse(xhr.responseText)
+          detalle = err.detail || detalle
+        } catch (_) {}
+        setError('Error al procesar: ' + detalle)
+        setProcesando(false)
+        setPasoActual(-1)
+        return
+      }
+
+      // Leer estadísticas del header X-Stats
+      const statsRaw = xhr.getResponseHeader('X-Stats')
+      const stats = statsRaw ? JSON.parse(statsRaw) : {}
 
       setPasoActual(7)
-      await new Promise(r => setTimeout(r, 60))
 
-      const wbout = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' })
-      const blob  = new Blob([wbout], {
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      // Construir blob del archivo limpio
+      const blob = new Blob([xhr.response], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       })
       const nombreSalida = archivo.name.replace(/\.xlsx$/i, '_v02.xlsx')
-      setResultado({ blob, nombre: nombreSalida, stats })
 
-    } catch (err) {
-      console.error(err)
-      setError('Error al procesar: ' + err.message)
-    } finally {
+      setTimeout(() => {
+        setResultado({ blob, nombre: nombreSalida, stats })
+        setProcesando(false)
+        setPasoActual(-1)
+      }, 400)
+    })
+
+    xhr.addEventListener('error', () => {
+      setError(
+        'No se pudo conectar con el servidor. ' +
+        'Verifica que el backend esté activo en Render.'
+      )
       setProcesando(false)
       setPasoActual(-1)
-    }
+    })
+
+    xhr.open('POST', `${API_URL}/limpiar`)
+    xhr.responseType = 'arraybuffer'
+    setPasoActual(1)
+    xhr.send(formData)
   }
 
   const descargar = () => {
     if (!resultado) return
     const url = URL.createObjectURL(resultado.blob)
-    const a = document.createElement('a')
-    a.href = url
+    const a   = document.createElement('a')
+    a.href     = url
     a.download = resultado.nombre
     a.click()
     URL.revokeObjectURL(url)
@@ -159,16 +215,17 @@ export default function App() {
 
   const limpiar = () => { setArchivo(null); setResultado(null); setError(null) }
 
-  const stats = resultado?.stats
-  const totalEspeciales = stats
-    ? stats.comillasDobles + stats.comillasSencillas + stats.pipes : 0
-  const topCols = stats
-    ? Object.entries(stats.topColumnas).sort((a, b) => b[1] - a[1]).slice(0, 10) : []
+  const stats        = resultado?.stats
+  const totalEsp     = stats ? stats.comillasDobles + stats.comillasSencillas + stats.pipes : 0
+  const topCols      = stats
+    ? Object.entries(stats.topColumnas).sort((a, b) => b[1] - a[1]).slice(0, 10)
+    : []
 
+  // ─────────────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
 
-      {/* ── HEADER ── */}
+      {/* ── HEADER ─────────────────────────────────────────────────────────── */}
       <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-6 py-0">
           <div className="flex items-center justify-between h-16">
@@ -177,44 +234,43 @@ export default function App() {
                 <FileSpreadsheet size={20} className="text-white" />
               </div>
               <div>
-                <h1 className="text-sm font-bold text-gray-900 leading-tight">
-                  CarteraClean Pro
-                </h1>
+                <h1 className="text-sm font-bold text-gray-900 leading-tight">CarteraClean Pro</h1>
                 <p className="text-xs text-gray-500">Módulo ETL · Limpieza Inteligente de Cartera</p>
               </div>
             </div>
             <div className="hidden sm:flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-1.5">
-              <Shield size={13} className="text-green-600" />
-              <span className="text-xs font-medium text-green-700">Procesamiento local seguro</span>
+              <Wifi size={13} className="text-green-600" />
+              <span className="text-xs font-medium text-green-700">Servidor activo</span>
             </div>
           </div>
         </div>
       </header>
 
-      {/* ── SUBHEADER AZUL ── */}
+      {/* ── SUBHEADER AZUL ─────────────────────────────────────────────────── */}
       <div className="bg-gradient-to-r from-blue-700 via-blue-600 to-blue-500 text-white">
         <div className="max-w-5xl mx-auto px-6 py-8">
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-2 h-8 bg-white/40 rounded-full"></div>
+            <div className="w-2 h-8 bg-white/40 rounded-full" />
             <h2 className="text-2xl font-extrabold tracking-tight">
               Limpieza y Validación Automática de Cartera
             </h2>
           </div>
           <p className="text-blue-100 text-sm ml-5">
-            Carga tu archivo Excel · Procesamiento inteligente aplicado en segundos · Sin pérdida de datos
+            Carga tu archivo Excel · Procesamiento en servidor · Sin límite de tamaño
           </p>
           <div className="flex flex-wrap gap-3 mt-4 ml-5">
-            <span className="bg-white/20 text-white text-xs font-semibold px-3 py-1 rounded-full">⚡ Procesamiento local</span>
-            <span className="bg-white/20 text-white text-xs font-semibold px-3 py-1 rounded-full">📁 Hasta 400 MB</span>
-            <span className="bg-white/20 text-white text-xs font-semibold px-3 py-1 rounded-full">🔒 Sin servidores</span>
+            <span className="bg-white/20 text-white text-xs font-semibold px-3 py-1 rounded-full">⚡ Procesamiento en servidor</span>
+            <span className="bg-white/20 text-white text-xs font-semibold px-3 py-1 rounded-full">📁 Sin límite de tamaño</span>
+            <span className="bg-white/20 text-white text-xs font-semibold px-3 py-1 rounded-full">🔒 Archivo no almacenado</span>
             <span className="bg-white/20 text-white text-xs font-semibold px-3 py-1 rounded-full">📊 Reporte de estadísticas</span>
           </div>
         </div>
       </div>
 
+      {/* ── MAIN ───────────────────────────────────────────────────────────── */}
       <main className="max-w-5xl mx-auto w-full px-6 py-8 flex-1 space-y-6">
 
-        {/* ── ZONA DE CARGA ── */}
+        {/* ── ZONA DE CARGA ─────────────────────────────────────────────────── */}
         {!resultado && (
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-2">
@@ -222,6 +278,8 @@ export default function App() {
               <h3 className="font-semibold text-gray-800 text-sm">Cargar Archivo</h3>
             </div>
             <div className="p-6">
+
+              {/* Drop zone */}
               <div
                 onDrop={onDrop}
                 onDragOver={e => e.preventDefault()}
@@ -242,12 +300,10 @@ export default function App() {
                         <Upload size={26} className="text-blue-600" />
                       </div>
                       <div>
-                        <p className="text-gray-700 font-semibold">
-                          Arrastra el archivo Excel aquí
-                        </p>
+                        <p className="text-gray-700 font-semibold">Arrastra el archivo Excel aquí</p>
                         <p className="text-gray-400 text-sm mt-1">
                           o haz clic para seleccionarlo ·{' '}
-                          <span className="text-blue-600 font-medium">.xlsx</span> · Soporta archivos de 60 MB+
+                          <span className="text-blue-600 font-medium">.xlsx</span> · Cualquier tamaño
                         </p>
                       </div>
                     </>
@@ -259,7 +315,7 @@ export default function App() {
                       <div>
                         <p className="text-gray-800 font-bold text-lg">{archivo.name}</p>
                         <p className="text-gray-500 text-sm mt-0.5">
-                          {(archivo.size / 1024 / 1024).toFixed(2)} MB · Listo para procesar
+                          {(archivo.size / MB).toFixed(2)} MB · Listo para procesar
                         </p>
                       </div>
                       <button
@@ -271,23 +327,17 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Advertencia tamaño grande */}
-              {archivo && (archivo.size / MB) > LIMITE_ADVERTENCIA_MB && (archivo.size / MB) <= LIMITE_MAXIMO_MB && (
-                <div className="mt-3 flex items-start gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800">
-                  <AlertCircle size={15} className="flex-shrink-0 mt-0.5 text-amber-600" />
-                  <p className="text-xs leading-relaxed">
-                    <span className="font-bold">Archivo grande ({(archivo.size / MB).toFixed(0)} MB).</span>{' '}
-                    El procesamiento puede tardar más de lo habitual o fallar por memoria del navegador.
-                    Para archivos de este tamaño se recomienda el <span className="font-bold">script Python</span> (limpiar_cartera.py).
-                  </p>
-                </div>
+              {/* Barra de subida (visible solo mientras procesa) */}
+              {procesando && uploadPct > 0 && uploadPct < 100 && (
+                <BarraSubida pct={uploadPct} />
               )}
 
-              {/* Botones */}
+              {/* Botones de acción */}
               {archivo && !resultado && (
                 <div className="flex gap-3 mt-4">
                   <button
-                    onClick={procesar} disabled={procesando}
+                    onClick={procesar}
+                    disabled={procesando}
                     className="flex-1 flex items-center justify-center gap-2 py-3 px-6
                       bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed
                       rounded-xl font-semibold text-white transition-all text-sm shadow-sm"
@@ -297,11 +347,11 @@ export default function App() {
                       : <><BarChart3 size={17} /> Iniciar Limpieza</>}
                   </button>
                   {!procesando && (
-                    <button onClick={limpiar}
+                    <button
+                      onClick={limpiar}
                       className="py-3 px-4 rounded-xl border border-gray-300
-                        hover:border-gray-400 text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition">
-                      <Trash2 size={17} />
-                    </button>
+                        hover:border-gray-400 text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition"
+                    ><Trash2 size={17} /></button>
                   )}
                 </div>
               )}
@@ -309,21 +359,21 @@ export default function App() {
           </div>
         )}
 
-        {/* ── ERROR ── */}
+        {/* ── ERROR ─────────────────────────────────────────────────────────── */}
         {error && (
-          <div className="flex items-center gap-3 p-4 rounded-xl bg-red-50 border border-red-200 text-red-700">
-            <AlertCircle size={18} />
+          <div className="flex items-start gap-3 p-4 rounded-xl bg-red-50 border border-red-200 text-red-700">
+            <AlertCircle size={18} className="flex-shrink-0 mt-0.5" />
             <span className="text-sm font-medium">{error}</span>
           </div>
         )}
 
-        {/* ── PROGRESO ── */}
+        {/* ── PROGRESO ──────────────────────────────────────────────────────── */}
         {procesando && (
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-100">
               <h3 className="font-semibold text-gray-800 text-sm flex items-center gap-2">
                 <Loader2 size={15} className="animate-spin text-blue-600" />
-                Procesando archivo...
+                Procesando archivo en servidor...
               </h3>
             </div>
             <div className="p-4 space-y-1">
@@ -335,7 +385,7 @@ export default function App() {
           </div>
         )}
 
-        {/* ── RESULTADO ── */}
+        {/* ── RESULTADO ─────────────────────────────────────────────────────── */}
         {resultado && stats && (
           <div className="space-y-6">
 
@@ -362,7 +412,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* RESUMEN GENERAL */}
+            {/* Resumen general */}
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
               <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-2">
                 <TrendingUp size={16} className="text-blue-600" />
@@ -372,18 +422,18 @@ export default function App() {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                   <StatCard label="Registros procesados" value={stats.filas}    color="blue"   icon={Database} />
                   <StatCard label="Columnas procesadas"   value={stats.columnas} color="purple" icon={FileText} />
-                  <StatCard label="Hoja principal"        value={stats.hojaPrincipal} color="gray" icon={FileSpreadsheet} />
+                  <StatCard label="Hoja principal"        value={stats.hojaPrincipal}  color="gray"  icon={FileSpreadsheet} />
                   <StatCard
                     label="Hojas eliminadas"
-                    value={stats.hojasEliminadas.length > 0 ? stats.hojasEliminadas.join(', ') : 'Ninguna'}
-                    color={stats.hojasEliminadas.length > 0 ? 'amber' : 'green'}
+                    value={stats.hojasEliminadas?.length > 0 ? stats.hojasEliminadas.join(', ') : 'Ninguna'}
+                    color={stats.hojasEliminadas?.length > 0 ? 'amber' : 'green'}
                     icon={Trash2}
                   />
                 </div>
               </div>
             </div>
 
-            {/* CAMBIOS POR TIPO */}
+            {/* Cambios por tipo */}
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
               <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-2">
                 <BarChart3 size={16} className="text-blue-600" />
@@ -391,12 +441,12 @@ export default function App() {
               </div>
               <div className="p-6">
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                  <StatCard label="Espacios múltiples corregidos"          value={stats.espaciosCorregidos} color="blue" />
-                  <StatCard label='Comillas dobles " eliminadas'            value={stats.comillasDobles}    color="amber" />
-                  <StatCard label="Comillas simples ' eliminadas"           value={stats.comillasSencillas} color="amber" />
-                  <StatCard label="Pipes | eliminados"                      value={stats.pipes}             color="amber" />
-                  <StatCard label="Total caracteres especiales eliminados"  value={totalEspeciales}         color="red" />
-                  <StatCard label="Celdas calificación vacías corregidas"   value={stats.califCeldasEspacio} color="purple" />
+                  <StatCard label="Espacios múltiples corregidos"         value={stats.espaciosCorregidos} color="blue" />
+                  <StatCard label='Comillas dobles " eliminadas'           value={stats.comillasDobles}    color="amber" />
+                  <StatCard label="Comillas simples ' eliminadas"          value={stats.comillasSencillas} color="amber" />
+                  <StatCard label="Pipes | eliminados"                     value={stats.pipes}             color="amber" />
+                  <StatCard label="Total caracteres especiales"            value={totalEsp}                color="red" />
+                  <StatCard label="Calificaciones con espacio corregidas"  value={stats.califCeldasEspacio} color="purple" />
                 </div>
               </div>
             </div>
@@ -408,14 +458,14 @@ export default function App() {
               </div>
               <div className="p-6">
                 <div className="grid grid-cols-2 gap-4">
-                  <StatCard label="Registros con LARGO > 50 detectados" value={stats.sublineaMayor50} color="amber" />
-                  <StatCard label="Registros con TRIM aplicado"          value={stats.sublineaTrimmed} color="green" />
+                  <StatCard label="Registros con LARGO > 50" value={stats.sublineaMayor50} color="amber" />
+                  <StatCard label="Registros con TRIM aplicado" value={stats.sublineaTrimmed} color="green" />
                 </div>
               </div>
             </div>
 
-            {/* CALIFICACIONES */}
-            {Object.keys(stats.valoresCalif).length > 0 && (
+            {/* Calificaciones */}
+            {stats.valoresCalif && Object.keys(stats.valoresCalif).length > 0 && (
               <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-2">
                   <Shield size={16} className="text-blue-600" />
@@ -451,7 +501,7 @@ export default function App() {
               </div>
             )}
 
-            {/* TOP COLUMNAS */}
+            {/* Top columnas */}
             {topCols.length > 0 && (
               <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
                 <button
@@ -459,7 +509,9 @@ export default function App() {
                   className="w-full px-6 py-4 border-b border-gray-100 flex items-center justify-between hover:bg-gray-50 transition"
                 >
                   <h3 className="font-bold text-gray-800">Top columnas con más celdas modificadas</h3>
-                  {mostrarDetalle ? <ChevronUp size={18} className="text-gray-500" /> : <ChevronDown size={18} className="text-gray-500" />}
+                  {mostrarDetalle
+                    ? <ChevronUp size={18} className="text-gray-500" />
+                    : <ChevronDown size={18} className="text-gray-500" />}
                 </button>
                 {mostrarDetalle && (
                   <div className="overflow-x-auto">
@@ -494,17 +546,16 @@ export default function App() {
         )}
       </main>
 
-      {/* ── FOOTER ── */}
+      {/* ── FOOTER ─────────────────────────────────────────────────────────── */}
       <footer className="bg-white border-t border-gray-200 mt-8">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
-          <span className="text-xs text-gray-400">
-            © 2026 CarteraClean Pro · Módulo ETL
-          </span>
+          <span className="text-xs text-gray-400">© 2026 CarteraClean Pro · Módulo ETL</span>
           <span className="text-xs text-gray-400">
             Diseñado por <span className="font-semibold text-gray-600">Ing. Hernán Conrado Medina</span>
           </span>
         </div>
       </footer>
+
     </div>
   )
 }
