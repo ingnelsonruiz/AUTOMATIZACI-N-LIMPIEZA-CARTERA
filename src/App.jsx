@@ -163,7 +163,7 @@ export default function App() {
                 <h1 className="text-sm font-bold text-gray-900 leading-tight">
                   Automatización Limpieza Cartera
                 </h1>
-                <p className="text-xs text-gray-500">Dusakawi EPS · Sistema de Gestión de Datos</p>
+                <p className="text-xs text-gray-500">Dusakawi EPS · Módulo ETL</p>
               </div>
             </div>
             <div className="hidden sm:flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-1.5">
@@ -461,7 +461,7 @@ export default function App() {
             © 2026 Dusakawi EPS · Automatización Limpieza Cartera
           </span>
           <span className="text-xs text-gray-400">
-            Procesamiento 100% local · Sin servidores
+            Diseñado por <span className="font-semibold text-gray-500">Ing. Hernán Conrado Medina</span>
           </span>
         </div>
       </footer>
